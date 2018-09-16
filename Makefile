@@ -31,7 +31,7 @@ create: validate-app
 	ssh -t ${DOKKU_HOST} docker tag hitwe/phpmemcachedadmin:latest dokku/${NAME}:latest
 	# create an app and set environment variable+port before 1st deployment
 	ssh -t dokku@${DOKKU_HOST} apps:create ${NAME}
-	# link with DB
+	# link with memcached
 	ssh -t dokku@${DOKKU_HOST} memcached:link ${DOKKU_MEMCACHED_SERVICE} ${NAME}
 	# trigger deployment on host
 	ssh -t dokku@${DOKKU_HOST} tags:deploy ${NAME} latest
