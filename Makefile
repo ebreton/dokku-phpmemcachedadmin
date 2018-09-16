@@ -1,6 +1,9 @@
 DOKKU_HOST:=breton.ch
 DOKKU_LETSENCRYPT_EMAIL:=manu@ibimus.com
-DOKKU_MARIADB_SERVICE:=mysql
+DOKKU_MEMCACHED_SERVICE:=memcached
+
+BASIC_AUTH_USER:=admin
+BASIC_AUTH_PASSWORD:=admin
 
 LOCAL_BACKUP_PATH:=~/var/dokku_backup
 
@@ -8,14 +11,16 @@ LOCAL_BACKUP_PATH:=~/var/dokku_backup
 # ONE OFF
 
 init-host:	
+	# to add basic authentication
+	# ! requires: sudo dokku plugin:install https://github.com/dokku/dokku-http-auth.git
 	# set email to use for let's encrypt globally
 	# ! requires: sudo dokku plugin:install https://github.com/dokku/dokku-letsencrypt.git
 	ssh -t dokku@${DOKKU_HOST} config:set --global DOKKU_LETSENCRYPT_EMAIL=${DOKKU_LETSENCRYPT_EMAIL}
-	# setup MariaDB
-	# ! requires: sudo dokku plugin:install https://github.com/dokku/dokku-mariadb.git
-	ssh -t dokku@${DOKKU_HOST} mariadb:create ${DOKKU_MARIADB_SERVICE} || true
-	# pull initial docker image for Wordpress
-	ssh -t ${DOKKU_HOST} docker pull phpmyadmin/phpmyadmin:latest
+	# setup Memcached
+	# ! requires: sudo dokku plugin:install https://github.com/dokku/dokku-memcached.git
+	ssh -t dokku@${DOKKU_HOST} memcached:create ${DOKKU_MEMCACHED_SERVICE} || true
+	# pull initial docker image for memcached admin
+	ssh -t ${DOKKU_HOST} docker pull hitwe/phpmemcachedadmin:latest
 
 
 ###
@@ -23,19 +28,17 @@ init-host:
 
 create: validate-app
 	# and tag official image with our app name
-	ssh -t ${DOKKU_HOST} docker tag phpmyadmin/phpmyadmin:latest dokku/${NAME}:latest
+	ssh -t ${DOKKU_HOST} docker tag hitwe/phpmemcachedadmin:latest dokku/${NAME}:latest
 	# create an app and set environment variable+port before 1st deployment
 	ssh -t dokku@${DOKKU_HOST} apps:create ${NAME}
-	ssh -t dokku@${DOKKU_HOST} config:set ${NAME} PMA_ABSOLUTE_URI=https://${NAME}.${DOKKU_HOST}
-	ssh -t dokku@${DOKKU_HOST} config:set ${NAME} PMA_ARBITRARY=1
 	# link with DB
-	ssh -t dokku@${DOKKU_HOST} mariadb:link ${DOKKU_MARIADB_SERVICE} ${NAME}
+	ssh -t dokku@${DOKKU_HOST} memcached:link ${DOKKU_MEMCACHED_SERVICE} ${NAME}
 	# trigger deployment on host
 	ssh -t dokku@${DOKKU_HOST} tags:deploy ${NAME} latest
 	# switch to HTTPs
 	ssh -t dokku@${DOKKU_HOST} letsencrypt ${NAME}
-	# remove unnecessary port
-	ssh -t dokku@${DOKKU_HOST} proxy:ports-remove ${NAME} http:9000:9000
+	# enable basic Auth
+	ssh -t dokku@${DOKKU_HOST} http-auth:on ${NAME} ${BASIC_AUTH_USER} ${BASIC_AUTH_PASSWORD}
 
 destroy: validate-app
 	ssh -t dokku@${DOKKU_HOST} apps:destroy ${NAME}
@@ -58,6 +61,7 @@ storage:
 
 config: validate-app
 	ssh -t dokku@${DOKKU_HOST} config ${NAME}
+	ssh -t dokku@${DOKKU_HOST} http-auth ${NAME}
 
 
 ###
